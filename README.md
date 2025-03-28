@@ -9,17 +9,72 @@ graph LR
     S3[S3 Bucket] -->|JSONファイル追加| EventBridge
     EventBridge -->|トリガー| ECS[ECS Fargate Task]
     ECS -->|YAML変換| API[API Endpoint]
-    CloudTrail -->|ログ| CloudWatch[CloudWatch Logs]
+    ECS -->|ログ| CloudWatch[CloudWatch Logs]
 ```
 
-## 主な機能
+## 作成されるAWSリソース
 
-- S3バケットの監視とイベント検知
-- JSONからYAMLへの自動変換
-- ECS Fargateを使用したサーバーレス実行
-- APIエンドポイントへのデータ送信
-- CloudWatchによるログ管理
-- 処理済みファイルの自動アーカイブ
+### ECS関連
+1. **ECSクラスター** (`aws_ecs_cluster`)
+   - 名前: json-to-yaml-converter
+   - Container Insightsが有効化
+
+2. **ECSタスク定義** (`aws_ecs_task_definition`)
+   - Fargate互換
+   - ネットワークモード: awsvpc
+   - CPU: 256 units (デフォルト)
+   - メモリ: 512 MB (デフォルト)
+   - コンテナ定義:
+     - 環境変数: S3_BUCKET, API_ENDPOINT
+     - CloudWatchログの設定
+
+### IAMロールとポリシー
+1. **ECSタスク実行ロール** (`aws_iam_role.ecs_task_execution`)
+   - 名前: json-to-yaml-converter-execution
+   - 権限: AmazonECSTaskExecutionRolePolicy
+
+2. **ECSタスクロール** (`aws_iam_role.ecs_task`)
+   - 名前: json-to-yaml-converter-task
+   - S3アクセス権限:
+     - GetObject
+     - ListBucket
+     - PutObject
+     - DeleteObject
+
+3. **EventBridgeスケジューラーロール** (`aws_iam_role.scheduler`)
+   - 名前: json-to-yaml-converter-scheduler
+   - ECS実行権限:
+     - RunTask
+     - ListTasks
+     - DescribeTasks
+   - EventBridge権限:
+     - PutEvents
+     - PutTargets
+     - PutRule
+     - DescribeRule
+
+### EventBridge関連
+1. **EventBridgeルール** (`aws_cloudwatch_event_rule`)
+   - 名前: capture-s3-put
+   - トリガー: S3オブジェクト作成イベント
+   - 監視対象: 指定されたS3バケット
+
+2. **EventBridgeターゲット** (`aws_cloudwatch_event_target`)
+   - ECS Fargateタスクの起動設定
+   - ネットワーク設定:
+     - サブネット指定
+     - セキュリティグループ適用
+     - パブリックIP自動割当
+
+### CloudWatch関連
+1. **CloudWatchロググループ** (`aws_cloudwatch_log_group`)
+   - 名前: /ecs/json-to-yaml-converter
+   - ログ保持期間: 7日
+
+### ネットワーク関連
+1. **セキュリティグループ** (`aws_security_group`)
+   - 名前: json-to-yaml-converter-task
+   - アウトバウンドルール: すべてのトラフィックを許可
 
 ## 前提条件
 
@@ -33,12 +88,11 @@ graph LR
 
 ```hcl
 # terraform.tfvars
-s3_bucket_name         = "your-bucket-name"
-api_endpoint           = "https://your-api-endpoint"
-vpc_id                 = "vpc-xxxxxxxx"
-subnet_ids             = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]
-cloudtrail_bucket_name = "your-cloudtrail-bucket"
-container_image        = "your-container-image-uri"
+s3_bucket_name  = "your-bucket-name"
+api_endpoint    = "https://your-api-endpoint"
+vpc_id         = "vpc-xxxxxxxx"
+subnet_ids     = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]
+container_image = "your-container-image-uri"
 ```
 
 2. Terraformの初期化と適用
@@ -57,7 +111,6 @@ terraform apply
 | api_endpoint | 変換後のデータを送信するAPIエンドポイント | https://httpbin.org/put |
 | vpc_id | タスクを実行するVPC ID | 必須 |
 | subnet_ids | タスクを実行するサブネットIDのリスト | 必須 |
-| cloudtrail_bucket_name | CloudTrailログ用のS3バケット名 | 必須 |
 | container_image | コンテナイメージURI | 必須 |
 | task_cpu | タスクのCPUユニット | 256 |
 | task_memory | タスクのメモリ (MB) | 512 |
@@ -78,14 +131,6 @@ terraform apply
 
 CloudWatchロググループで以下のログを確認できます：
 - ECSタスク実行ログ: `/ecs/json-to-yaml-converter`
-- S3イベントログ: `/aws/cloudtrail/s3-events`
-
-## セキュリティ
-
-- ECSタスク実行用のIAMロール
-- S3アクセス用のIAMポリシー
-- CloudTrail用のIAMロール
-- セキュリティグループによるネットワーク制御
 
 ## 注意事項
 

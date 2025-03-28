@@ -19,11 +19,6 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
-variable "cloudtrail_bucket_name" {
-  description = "Name of the S3 bucket for CloudTrail logs"
-  type        = string
-}
-
 variable "container_image" {
   description = "Container image URI"
   type        = string
