@@ -190,28 +190,6 @@ resource "aws_iam_role_policy" "scheduler_ecs" {
   })
 }
 
-# Additional EventBridge permissions
-resource "aws_iam_role_policy" "scheduler_events" {
-  name = "events-execution"
-  role = aws_iam_role.scheduler.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "events:PutEvents",
-          "events:PutTargets",
-          "events:PutRule",
-          "events:DescribeRule"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
 # EventBridge Rule for S3 events
 resource "aws_cloudwatch_event_rule" "s3_event" {
   name        = "capture-s3-put"

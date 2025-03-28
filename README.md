@@ -48,7 +48,6 @@ graph LR
      - ListTasks
      - DescribeTasks
    - EventBridge権限:
-     - PutEvents
      - PutTargets
      - PutRule
      - DescribeRule
