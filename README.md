@@ -210,6 +210,49 @@ terraform apply
       - 処理失敗時はEventBridgeのリトライ機能が働く
 5. 処理結果がCloudWatchログに記録
 
+### EventBridgeのリトライ設定（デフォルト）
+- 最大リトライ回数: 185回
+- リトライ期間: 24時間
+- 指数バックオフ: 10秒から開始（最大500秒）
+- リトライ失敗後はDLQにメッセージが送信
+
+### 入力トランスフォーマーの仕組み
+
+EventBridgeからECSタスクへのデータ受け渡しには入力トランスフォーマーを使用しています：
+
+1. **入力パスの定義**
+   ```json
+   "input_paths": {
+     "bucket": "$.detail.bucket.name",
+     "key": "$.detail.object.key"
+   }
+   ```
+   - S3イベントから必要な情報を抽出
+   - bucket: バケット名
+   - key: アップロードされたファイルのキー
+
+2. **入力テンプレート**
+   ```json
+   {
+     "containerOverrides": [
+       {
+         "name": "converter",
+         "environment": [
+           {
+             "name": "S3_FILE_KEY",
+             "value": "<key>"
+           }
+         ]
+       }
+     ]
+   }
+   ```
+   - ECSタスク定義のコンテナ環境変数を上書き
+   - `<key>`は抽出したファイルキーに置換
+   - S3_BUCKETはタスク定義で設定済みの値を使用
+
+この変換により、S3イベントの情報がECSタスクの環境変数として渡されます。
+
 ## ログの確認
 
 CloudWatchロググループで以下のログを確認できます：
