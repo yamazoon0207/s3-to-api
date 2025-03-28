@@ -185,11 +185,29 @@ terraform apply
 1. S3バケットに新しいJSONファイルがアップロードされる
 2. EventBridgeがファイル作成イベントを検知
 3. ECS Fargateタスクが起動
-4. Pythonスクリプトが:
-   - S3からJSONファイルを読み込み
-   - YAML形式に変換
-   - 指定されたAPIエンドポイントにデータを送信
-   - 処理済みファイルを`processed/`フォルダに移動
+4. Pythonスクリプトが以下の処理を実行:
+   1. 環境変数の検証
+      - S3_BUCKET: 処理対象のバケット名
+      - S3_FILE_KEY: 処理対象のファイルキー
+      - API_ENDPOINT: 送信先のエンドポイント（デフォルト: https://httpbin.org/put）
+   2. JSONファイルの処理
+      - S3からJSONファイルをダウンロード
+      - UTF-8でデコード
+      - JSONをPythonオブジェクトにパース
+   3. YAML形式への変換
+      - PyYAMLを使用してYAML形式に変換
+      - 日本語文字を正しく処理（allow_unicode=True）
+      - キーの順序を維持（sort_keys=False）
+   4. APIエンドポイントへの送信
+      - Content-Type: application/x-yaml
+      - PUTリクエストでデータを送信
+      - レスポンスステータスを確認
+   5. 成功時の後処理
+      - 処理済みファイルを`processed/`フォルダに移動
+      - 元のファイルを削除
+   6. エラーハンドリング
+      - 各ステップでのエラーをキャッチしてログ出力
+      - 処理失敗時はEventBridgeのリトライ機能が働く
 5. 処理結果がCloudWatchログに記録
 
 ## ログの確認
