@@ -8,6 +8,7 @@
 graph LR
     S3[S3 Bucket] -->|JSONファイル追加| EventBridge
     EventBridge -->|トリガー| ECS[ECS Fargate Task]
+    EventBridge -->|失敗時| DLQ[Dead Letter Queue]
     ECS -->|YAML変換| API[API Endpoint]
     ECS -->|ログ| CloudWatch[CloudWatch Logs]
 ```
@@ -20,6 +21,7 @@ graph LR
    - Container Insightsが有効化
 
 2. **ECSタスク定義** (`aws_ecs_task_definition`)
+   - 名前: json-to-yaml-converter
    - Fargate互換
    - ネットワークモード: awsvpc
    - CPU: 256 units (デフォルト)
@@ -60,10 +62,19 @@ graph LR
 
 2. **EventBridgeターゲット** (`aws_cloudwatch_event_target`)
    - ECS Fargateタスクの起動設定
+   - DLQ設定: 失敗したイベントの保存先
    - ネットワーク設定:
      - サブネット指定
      - セキュリティグループ適用
      - パブリックIP自動割当
+
+3. **デッドレターキュー** (`aws_sqs_queue`)
+   - 名前: json-to-yaml-converter-dlq
+   - 用途: EventBridgeルールの実行に失敗したイベントを保存
+   - メッセージ保持期間: 14日
+   - 暗号化: AWS KMS (aws/sqs)
+   - アクセス制御: EventBridgeからのメッセージ送信を許可
+   - タグ: Name = json-to-yaml-converter-dlq
 
 ### CloudWatch関連
 1. **CloudWatchロググループ** (`aws_cloudwatch_log_group`)

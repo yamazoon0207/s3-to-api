@@ -190,6 +190,17 @@ resource "aws_iam_role_policy" "scheduler_ecs" {
   })
 }
 
+# DLQ for EventBridge
+resource "aws_sqs_queue" "dlq" {
+  name                      = "json-to-yaml-converter-dlq"
+  message_retention_seconds = 1209600  # 14日
+  kms_master_key_id        = "alias/aws/sqs"
+
+  tags = {
+    Name = "json-to-yaml-converter-dlq"
+  }
+}
+
 # EventBridge Rule for S3 events
 resource "aws_cloudwatch_event_rule" "s3_event" {
   name        = "capture-s3-put"
@@ -215,12 +226,40 @@ resource "aws_cloudwatch_event_rule" "s3_event" {
   }
 }
 
+# DLQ Policy for EventBridge
+resource "aws_sqs_queue_policy" "dlq" {
+  queue_url = aws_sqs_queue.dlq.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action = "sqs:SendMessage"
+        Resource = aws_sqs_queue.dlq.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn": aws_cloudwatch_event_rule.s3_event.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
 # EventBridge Target
 resource "aws_cloudwatch_event_target" "ecs_task" {
   rule      = aws_cloudwatch_event_rule.s3_event.name
   target_id = "RunECSTask"
   arn       = aws_ecs_cluster.main.arn
   role_arn  = aws_iam_role.scheduler.arn
+
+  dead_letter_config {
+    arn = aws_sqs_queue.dlq.arn
+  }
 
   ecs_target {
     task_count          = 1
