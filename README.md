@@ -91,6 +91,61 @@ graph LR
 - AWS CLI
 - Terraform 1.0以上
 - AWS アカウントとアクセス権限
+- Docker
+- AWS ECRへのアクセス権限
+
+## コンテナイメージの準備
+
+### 1. ECRリポジトリの作成
+
+```bash
+# リポジトリ名を設定
+REPO_NAME=json-to-yaml-converter
+
+# ECRリポジトリを作成
+aws ecr create-repository \
+    --repository-name ${REPO_NAME} \
+    --image-scanning-configuration scanOnPush=true
+
+# ECRレジストリのURLを取得
+REGISTRY_URL=$(aws ecr describe-repositories \
+    --repository-names ${REPO_NAME} \
+    --query 'repositories[0].repositoryUri' \
+    --output text)
+```
+
+### 2. Dockerイメージのビルド
+
+プロジェクトには以下のファイルが含まれています：
+
+- `Dockerfile`: Pythonアプリケーションのコンテナ化設定
+- `requirements.txt`: 必要なPythonパッケージ
+  - boto3: AWS SDK
+  - PyYAML: YAML変換ライブラリ
+  - requests: HTTPクライアント
+- `ecs_task.py`: メインアプリケーション
+
+イメージのビルドとプッシュ：
+
+```bash
+# ECRにログイン
+aws ecr get-login-password --region ap-northeast-1 | \
+    docker login --username AWS --password-stdin ${REGISTRY_URL}
+
+# Dockerイメージをビルド
+docker build -t ${REPO_NAME} .
+
+# イメージにタグを付与
+docker tag ${REPO_NAME}:latest ${REGISTRY_URL}:latest
+
+# ECRにプッシュ
+docker push ${REGISTRY_URL}:latest
+
+# コンテナイメージURIを表示（terraform.tfvarsで使用）
+echo "Container Image URI: ${REGISTRY_URL}:latest"
+```
+
+表示されたコンテナイメージURIを`terraform.tfvars`の`container_image`パラメータに設定します。
 
 ## セットアップ
 
